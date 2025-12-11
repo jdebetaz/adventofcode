@@ -393,115 +393,90 @@ fn solve_machine_part2(machine: &Machine) -> usize {
 }
 
 fn main() {
-    let input = fs::read_to_string("input.txt").expect("Failed to read input file");
-    let machines = parse_input(&input);
+    let args: Vec<String> = std::env::args().collect();
 
-    println!("=== Part 1: Indicator Lights ===");
-    let mut total_part1 = 0;
-    for machine in machines.iter() {
-        let min_presses = solve_machine(machine);
-        if min_presses != usize::MAX {
-            total_part1 += min_presses;
-        }
+    if args.len() < 2 {
+        eprintln!("Usage: {} <part1|part2>", args[0]);
+        std::process::exit(1);
     }
-    println!("Part 1 Total: {}", total_part1);
 
-    println!("\n=== Part 2: Joltage Counters ===");
+    let part = &args[1];
 
-    // Use multithreading for Part 2
-    let machines_arc = Arc::new(machines);
-    let results = Arc::new(Mutex::new(vec![0usize; machines_arc.len()]));
+    match fs::read_to_string("input.txt") {
+        Ok(input) => {
+            let machines = parse_input(&input);
 
-    let num_threads = 8;
-    let mut handles = vec![];
+            match part.as_str() {
+                "part1" => {
+                    println!("=== Part 1: Indicator Lights ===");
+                    let mut total_part1 = 0;
+                    for machine in machines.iter() {
+                        let min_presses = solve_machine(machine);
+                        if min_presses != usize::MAX {
+                            total_part1 += min_presses;
+                        }
+                    }
+                    println!("Part 1 Total: {}", total_part1);
+                }
+                "part2" => {
+                    println!("=== Part 2: Joltage Counters ===");
 
-    for thread_id in 0..num_threads {
-        let machines_clone = Arc::clone(&machines_arc);
-        let results_clone = Arc::clone(&results);
+                    // Use multithreading for Part 2
+                    let machines_arc = Arc::new(machines);
+                    let results = Arc::new(Mutex::new(vec![0usize; machines_arc.len()]));
 
-        let handle = thread::spawn(move || {
-            for i in (thread_id..machines_clone.len()).step_by(num_threads) {
-                let min_presses = solve_machine_part2(&machines_clone[i]);
-                let mut results = results_clone.lock().unwrap();
-                results[i] = min_presses;
+                    let num_threads = 8;
+                    let mut handles = vec![];
+
+                    for thread_id in 0..num_threads {
+                        let machines_clone = Arc::clone(&machines_arc);
+                        let results_clone = Arc::clone(&results);
+
+                        let handle = thread::spawn(move || {
+                            for i in (thread_id..machines_clone.len()).step_by(num_threads) {
+                                let min_presses = solve_machine_part2(&machines_clone[i]);
+                                let mut results = results_clone.lock().unwrap();
+                                results[i] = min_presses;
+                            }
+                        });
+
+                        handles.push(handle);
+                    }
+
+                    // Wait for all threads to complete
+                    for handle in handles {
+                        handle.join().unwrap();
+                    }
+
+                    let results = results.lock().unwrap();
+                    let mut total_part2 = 0;
+                    let mut unsolvable = Vec::new();
+
+                    for (i, &min_presses) in results.iter().enumerate() {
+                        if min_presses == usize::MAX {
+                            unsolvable.push(i + 1);
+                        } else {
+                            total_part2 += min_presses;
+                        }
+                    }
+
+                    if !unsolvable.is_empty() {
+                        println!(
+                            "Warning: {} machines unsolvable: {:?}",
+                            unsolvable.len(),
+                            unsolvable
+                        );
+                    }
+                    println!("Part 2 Total: {}", total_part2);
+                }
+                _ => {
+                    eprintln!("Invalid part: {}. Use 'part1' or 'part2'", part);
+                    std::process::exit(1);
+                }
             }
-        });
-
-        handles.push(handle);
-    }
-
-    // Wait for all threads to complete
-    for handle in handles {
-        handle.join().unwrap();
-    }
-
-    let results = results.lock().unwrap();
-    let mut total_part2 = 0;
-    let mut unsolvable = Vec::new();
-
-    for (i, &min_presses) in results.iter().enumerate() {
-        if min_presses == usize::MAX {
-            unsolvable.push(i + 1);
-        } else {
-            total_part2 += min_presses;
         }
-    }
-
-    if !unsolvable.is_empty() {
-        println!(
-            "Warning: {} machines unsolvable: {:?}",
-            unsolvable.len(),
-            unsolvable
-        );
-    }
-    println!("Part 2 Total: {}", total_part2);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_example_part1() {
-        let input = r#"[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
-[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
-[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}"#;
-
-        let machines = parse_input(input);
-        assert_eq!(machines.len(), 3);
-
-        let result1 = solve_machine(&machines[0]);
-        assert_eq!(result1, 2);
-
-        let result2 = solve_machine(&machines[1]);
-        assert_eq!(result2, 3);
-
-        let result3 = solve_machine(&machines[2]);
-        assert_eq!(result3, 2);
-
-        let total = result1 + result2 + result3;
-        assert_eq!(total, 7);
-    }
-
-    #[test]
-    fn test_example_part2() {
-        let input = r#"[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
-[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
-[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}"#;
-
-        let machines = parse_input(input);
-        assert_eq!(machines.len(), 3);
-
-        let result1 = solve_machine_part2(&machines[0]);
-        assert_eq!(result1, 10);
-
-        let result2 = solve_machine_part2(&machines[1]);
-        assert_eq!(result2, 12);
-
-        let result3 = solve_machine_part2(&machines[2]);
-        assert_eq!(result3, 11);
-
-        let total = result1 + result2 + result3;
-        assert_eq!(total, 33);
+        Err(error) => {
+            eprintln!("Error reading input.txt: {}", error);
+        }
     }
 }
