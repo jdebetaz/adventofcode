@@ -19,7 +19,7 @@ adventofcode/
 
 | Year | Language | Status |
 |------|----------|--------|
-| 2025 | Rust     | In Progress |
+| 2025 | Rust     | Completed |
 
 ## Running Solutions
 
